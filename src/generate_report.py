@@ -29,7 +29,7 @@ def add_page_number_footer(section):
     footer = section.footer
     p = footer.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run_left = p.add_run("Hierarchical Skin Cancer Detection System — Group B55 (CSE 2025–2026)     |     Page ")
+    run_left = p.add_run("Heritage Institute of Technology  |  Skin Cancer Detection (Group B55)     |     Page ")
     run_left.font.name = "Calibri"
     run_left.font.size = Pt(9)
     run_left.font.color.rgb = MUTED
@@ -218,9 +218,10 @@ def build_report():
 
     dept = doc.add_paragraph()
     dept.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    dept.paragraph_format.space_before = Pt(44)
+    dept.paragraph_format.space_before = Pt(36)
     r = dept.add_run(
         "Department of Computer Science & Engineering\n"
+        "Heritage Institute of Technology, Kolkata\n"
         "Academic Year: 2025–2026\n\n"
         "Repository: https://github.com/debayudh482/skin-cancer-detection"
     )
@@ -238,7 +239,8 @@ def build_report():
         "This is to certify that the project report entitled \"Skin Cancer Detection from Dermoscopic Images Using Deep Learning: "
         "A Two-Stage Hierarchical Clinical Triage & 9-Class Deep Ensemble System with Grad-CAM Visual Explainability\" is a bonafide "
         "work carried out by Debayudh Kundu (2351062) and Aditiya Majumdar (2351058), Group B55, of the Department of Computer "
-        "Science & Engineering during the Academic Year 2025–2026 in partial fulfillment of the academic requirements."
+        "Science & Engineering, Heritage Institute of Technology, Kolkata, during the Academic Year 2025–2026 in partial "
+        "fulfillment of the academic requirements."
     )
     sig = doc.add_paragraph()
     sig.paragraph_format.space_before = Pt(36)
@@ -251,9 +253,9 @@ def build_report():
     add_body(
         doc,
         "We hereby declare that the project work presented in this report is an authentic record of our own work carried out under "
-        "the guidance of the Department of Computer Science & Engineering. All experimental results, code implementations, and "
-        "visualizations reported herein were genuinely produced and verified by our team, and all external literature sources "
-        "and public datasets (ISIC) have been appropriately cited."
+        "the guidance of the Department of Computer Science & Engineering, Heritage Institute of Technology, Kolkata. All "
+        "experimental results, code implementations, and visualizations reported herein were genuinely produced and verified by "
+        "our team, and all external literature sources and public datasets (ISIC) have been appropriately cited."
     )
     sig2 = doc.add_paragraph()
     sig2.paragraph_format.space_before = Pt(28)

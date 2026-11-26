@@ -72,7 +72,7 @@ def add_header(slide, title: str, subtitle: str, page_num: int, total_pages: int
     # Footer
     ft = slide.shapes.add_textbox(Inches(0.6), Inches(7.1), Inches(9.5), Inches(0.3))
     fp = ft.text_frame.paragraphs[0]
-    fp.text = "Hierarchical Skin Cancer Detection System  |  Group B55  |  Dept. of CSE (2025–2026)"
+    fp.text = "Heritage Institute of Technology  |  Hierarchical Skin Cancer Detection  |  Group B55 (CSE 2025–2026)"
     fp.font.name = FONT_MAIN
     fp.font.size = Pt(9.5)
     fp.font.color.rgb = MUTED
@@ -285,7 +285,7 @@ def build_presentation():
     ip1.font.color.rgb = WHITE
 
     ip2 = itf.add_paragraph()
-    ip2.text = "Department of Computer Science & Engineering   |   Group: B55   |   Academic Year: 2025–2026"
+    ip2.text = "Department of Computer Science & Engineering   |   Heritage Institute of Technology, Kolkata   |   Group: B55   |   2025–2026"
     ip2.font.name = FONT_MAIN
     ip2.font.size = Pt(13.5)
     ip2.font.color.rgb = RGBColor(203, 213, 225)
