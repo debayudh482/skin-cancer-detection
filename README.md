@@ -68,7 +68,13 @@ python -m src.ensemble --checkpoints checkpoints/efficientnet_b0_best.pth checkp
 python -m src.train_binary --model efficientnet_b0 --stage1-epochs 2 --stage2-epochs 5
 ```
 
-### 4. Run Unified Hierarchical Clinical Prediction (+ Grad-CAM)
+### 4. Launch the Interactive Web UI (Recommended for Viva Demo)
+```powershell
+.\.venv\Scripts\streamlit.exe run app.py
+```
+Then open `http://localhost:8501` in your browser to drag-and-drop dermoscopic images (or pick built-in held-out test samples) and view live Stage-1 Risk Triage, Stage-2 Top-3 Subtypes, Stage-3 Grad-CAM heatmaps, and all evaluation charts.
+
+### 5. Run Unified Hierarchical Clinical Prediction via CLI (+ Grad-CAM)
 ```powershell
 python -m src.predict_hierarchical path\to\lesion.jpg --gradcam-out outputs\pred_gradcam.png
 ```
