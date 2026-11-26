@@ -1,38 +1,44 @@
-# Skin Cancer Detection from Dermoscopic Images Using Deep Learning
+# Hierarchical Skin Cancer Detection System (Deep Learning + Grad-CAM)
 
-An end-to-end **PyTorch** transfer learning and deep ensemble pipeline for **skin lesion classification** on the **ISIC** dermoscopic image dataset, featuring two-stage full fine-tuning, 4x Test-Time Augmentation (TTA), weighted soft-voting ensembling, binary malignant-vs-benign screening, and **Grad-CAM** visual explainability.
-
----
-
-## Project Overview
+A **Two-Stage Hierarchical Clinical Decision Support System** for dermoscopic skin lesion analysis on the **ISIC** dataset, combining:
+1. **Stage 1 — Hierarchical Binary Triage (Malignant/Pre-malignant vs. Benign):** Fuses a dedicated binary **EfficientNet-B0** classifier with the 9-class ensemble (`EfficientNet-B0 + MobileNetV2`) using **4x Test-Time Augmentation (TTA)** to output a clinical risk tier (**Low / Moderate / High Risk**).
+2. **Stage 2 — 9-Class Fine-Grained Subtype Ensemble:** Classifies the exact lesion subtype across all 9 ISIC categories.
+3. **Stage 3 — Grad-CAM Visual Explainability:** Highlights the lesion regions responsible for the model's prediction.
 
 - **Authors:** Debayudh Kundu (2351062) & Aditiya Majumdar (2351058) — Group B55, Dept. of CSE (2025–2026)
-- **Ensemble Backbones:** **EfficientNet-B0 + MobileNetV2** (also supports `densenet121` and `resnet50` via CLI)
-- **Dataset:** ISIC 9-Class Skin Cancer Dataset (`2,239` training images split 85/15 stratified into `1,903` train / `336` validation + `118` held-out test images)
-
-### 9 Skin Lesion Classes
-- **Malignant / Pre-Malignant:** Melanoma, Basal Cell Carcinoma, Squamous Cell Carcinoma, Actinic Keratosis
-- **Benign:** Nevus, Pigmented Benign Keratosis, Seborrheic Keratosis, Dermatofibroma, Vascular Lesion
 
 ---
 
-## Progression & Results
+## Experimental Results (ISIC 9-Class Dataset: 1,903 Train / 336 Val / 118 Test)
 
-| Model / Strategy | 9-Class Val Acc | 9-Class Macro ROC-AUC | Binary Screening Val Acc (Mal vs Ben) | Binary Sensitivity / Specificity |
+### Stage 1: Binary Clinical Screening (Malignant/Pre-Malignant vs. Benign)
+
+| Model / Strategy | Val Accuracy | Sensitivity (Cancer Recall) | Specificity | ROC-AUC |
 | :--- | :---: | :---: | :---: | :---: |
-| Slides Baseline (Frozen MobileNetV2, 10 ep) | 35.60% | — | — | — |
-| MobileNetV2 (2-Stage Top-Block Fine-Tune) | 66.07% | 0.9275 | — | — |
-| EfficientNet-B0 (Full Fine-Tune + 4x TTA) | 69.64% | — | — | — |
-| **Ensemble: EfficientNet-B0 + MobileNetV2 (4x TTA)** | **71.73%** | **0.9390** | **80.36%** | **84.3% / 76.5%** |
+| Standalone Binary EfficientNet-B0 (4x TTA) | 77.98% | 86.1% | 70.0% | 0.8445 |
+| 9-Class Ensemble Aggregated to Binary (4x TTA) | 80.36% | 84.3% | 76.5% | 0.8553 |
+| **Hierarchical Fusion (Binary + 9-Class Ensemble, 4x TTA)** | **81.55%** | **89.2%** | **74.1%** | **0.8576** |
 
-- **Held-Out Test (`n=118`):** 9-Class Macro ROC-AUC = **0.9272**, Binary Screening Accuracy = **70.34%** (Specificity **83.3%**, AUC **0.8192**).
+### Stage 2: 9-Class Fine-Grained Subtype Classification
 
-### Visual Outputs (`outputs/`)
+| Model / Strategy | 9-Class Val Acc | 9-Class Macro F1 | 9-Class Macro ROC-AUC |
+| :--- | :---: | :---: | :---: |
+| Original Slides Baseline (Frozen MobileNetV2, 10 ep) | 35.60% | — | — |
+| MobileNetV2 (2-Stage Top-Block Fine-Tune) | 66.07% | 0.5754 | 0.9275 |
+| EfficientNet-B0 (Full Fine-Tune + 4x TTA) | 69.64% | — | — |
+| **Ensemble: EfficientNet-B0 + MobileNetV2 (4x TTA)** | **71.73%** | **0.6125** | **0.9390** |
+
+> **Held-Out Test (`n=118`):** 9-Class Macro ROC-AUC = **0.9272** | Hierarchical Binary Specificity = **81.5%** (AUC **0.8073**).
+
+---
+
+## Visual Outputs (`outputs/`)
+- `outputs/binary_triage_evaluation.png` — Stage-1 Hierarchical Triage Confusion Matrix & ROC Curve
 - `outputs/training_history.png` — Training & validation loss/accuracy curves
 - `outputs/confusion_matrix_val.png` & `outputs/confusion_matrix_test.png` — 9-class confusion matrices
 - `outputs/roc_curves_val.png` — Multi-class one-vs-rest ROC curves
 - `outputs/gradcam_samples.png` — Grad-CAM visual explanations on held-out test lesions
-- `outputs/metrics.json` — Full per-class and binary screening metrics
+- `outputs/hierarchical_triage_metrics.json` & `outputs/metrics.json` — Full quantitative metrics
 
 ---
 
@@ -46,27 +52,26 @@ pip install -r requirements.txt
 ```
 
 ### 2. Prepare Dataset (Pre-Resize for Fast Training)
-Extract `Skin_ISIC.zip` into `data/`, then pre-resize images once to `256×256`:
+Extract `Skin_ISIC.zip` into `data/`, then run:
 ```powershell
 python -m src.prepare_data
 ```
 
-### 3. Train Individual Models & Run Ensemble with 4x TTA
+### 3. Train & Evaluate the Hierarchical System
 ```powershell
-# Train EfficientNet-B0 (full fine-tuning)
+# Stage 2 backbones (9-class)
 python -m src.train --model efficientnet_b0 --unfreeze all --stage1-epochs 3 --stage2-epochs 12 --skip-eval
-
-# Train MobileNetV2 (full fine-tuning)
 python -m src.train --model mobilenet_v2 --unfreeze all --stage1-epochs 3 --stage2-epochs 12 --skip-eval
+python -m src.ensemble --checkpoints checkpoints/efficientnet_b0_best.pth checkpoints/best_model.pth
 
-# Optional 3rd backbone: DenseNet121
-python -m src.train --model densenet121 --unfreeze all --stage1-epochs 3 --stage2-epochs 12 --skip-eval
-
-# Evaluate weighted soft-voting ensemble with 4x TTA
-python -m src.ensemble --checkpoints checkpoints/efficientnet_b0_best.pth checkpoints/mobilenet_v2_best.pth
+# Stage 1 dedicated binary triage + hierarchical fusion
+python -m src.train_binary --model efficientnet_b0 --stage1-epochs 2 --stage2-epochs 5
 ```
 
-### 4. Single-Image Prediction + Grad-CAM
+### 4. Run Unified Hierarchical Clinical Prediction (+ Grad-CAM)
 ```powershell
-python -m src.predict path\to\lesion.jpg --checkpoint checkpoints/efficientnet_b0_best.pth --gradcam-out outputs\pred_gradcam.png
+python -m src.predict_hierarchical path\to\lesion.jpg --gradcam-out outputs\pred_gradcam.png
 ```
+
+### 5. Scale Up on Free Google Colab T4 GPU
+Open `notebooks/train_colab_ham10000.ipynb` in Google Colab (`Runtime -> Change runtime type -> T4 GPU`) to train the full **3-model ensemble (`EfficientNet-B0 + DenseNet121 + MobileNetV2`)** in ~5–8 minutes.

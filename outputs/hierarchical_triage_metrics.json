@@ -1,0 +1,72 @@
+{
+  "stage1_binary_model": "efficientnet_b0",
+  "hierarchical_fusion_models": [
+    "binary_efficientnet_b0",
+    "9class_efficientnet_b0",
+    "9class_mobilenet_v2"
+  ],
+  "standalone_binary_val_tta": {
+    "threshold": 0.5,
+    "accuracy": 0.7797619047619048,
+    "sensitivity": 0.8614457831325302,
+    "specificity": 0.7,
+    "precision": 0.7371134020618557,
+    "recall": 0.8614457831325302,
+    "f1_score": 0.7944444444444444,
+    "roc_auc": 0.8444720056697378,
+    "confusion_matrix": {
+      "tn": 119,
+      "fp": 51,
+      "fn": 23,
+      "tp": 143
+    }
+  },
+  "standalone_binary_test_tta": {
+    "threshold": 0.5,
+    "accuracy": 0.6864406779661016,
+    "sensitivity": 0.609375,
+    "specificity": 0.7777777777777778,
+    "precision": 0.7647058823529411,
+    "recall": 0.609375,
+    "f1_score": 0.6782608695652174,
+    "roc_auc": 0.7786458333333333,
+    "confusion_matrix": {
+      "tn": 42,
+      "fp": 12,
+      "fn": 25,
+      "tp": 39
+    }
+  },
+  "hierarchical_fused_val_tta": {
+    "threshold": 0.5,
+    "accuracy": 0.8154761904761905,
+    "sensitivity": 0.891566265060241,
+    "specificity": 0.7411764705882353,
+    "precision": 0.7708333333333334,
+    "recall": 0.891566265060241,
+    "f1_score": 0.8268156424581006,
+    "roc_auc": 0.8575832742735648,
+    "confusion_matrix": {
+      "tn": 126,
+      "fp": 44,
+      "fn": 18,
+      "tp": 148
+    }
+  },
+  "hierarchical_fused_test_tta": {
+    "threshold": 0.5,
+    "accuracy": 0.6949152542372882,
+    "sensitivity": 0.59375,
+    "specificity": 0.8148148148148148,
+    "precision": 0.7916666666666666,
+    "recall": 0.59375,
+    "f1_score": 0.6785714285714286,
+    "roc_auc": 0.8072916666666667,
+    "confusion_matrix": {
+      "tn": 44,
+      "fp": 10,
+      "fn": 26,
+      "tp": 38
+    }
+  }
+}
