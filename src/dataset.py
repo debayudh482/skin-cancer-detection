@@ -15,22 +15,29 @@ from src.config import (
     IMAGENET_MEAN,
     IMAGENET_STD,
     RANDOM_SEED,
-    TEST_DIR,
-    TRAIN_DIR,
+    RAW_DATA_ROOT,
+    RESIZED_DATA_ROOT,
     VAL_SPLIT,
 )
+
+
+def resolve_data_dirs() -> Tuple[Path, Path]:
+    """Return (train_dir, test_dir), preferring pre-resized images if present."""
+    root = RESIZED_DATA_ROOT if (RESIZED_DATA_ROOT / "Train").exists() else RAW_DATA_ROOT
+    return root / "Train", root / "Test"
 
 
 def get_transforms(image_size: int = IMAGE_SIZE) -> Tuple[transforms.Compose, transforms.Compose]:
     """Return training (augmented) and evaluation transforms."""
     train_tf = transforms.Compose([
-        transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
+        transforms.RandomResizedCrop(image_size, scale=(0.75, 1.0), ratio=(0.85, 1.15)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
-        transforms.RandomRotation(degrees=20),
-        transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.02),
+        transforms.RandomRotation(degrees=30),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.03),
         transforms.ToTensor(),
         transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        transforms.RandomErasing(p=0.15, scale=(0.02, 0.12)),
     ])
 
     eval_tf = transforms.Compose([
@@ -60,7 +67,7 @@ class SubsetWithTransform(Dataset):
         return img, label
 
 
-def compute_class_weights(labels: List[int], num_classes: int, power: float = 0.5) -> torch.Tensor:
+def compute_class_weights(labels: List[int], num_classes: int, power: float = 0.35) -> torch.Tensor:
     """Compute smoothed inverse-frequency class weights normalized to mean 1.0."""
     counts = np.bincount(labels, minlength=num_classes).astype(np.float64)
     total = counts.sum()
@@ -70,8 +77,8 @@ def compute_class_weights(labels: List[int], num_classes: int, power: float = 0.
 
 
 def create_dataloaders(
-    train_dir: Path = TRAIN_DIR,
-    test_dir: Path = TEST_DIR,
+    train_dir: Path = None,
+    test_dir: Path = None,
     batch_size: int = 32,
     val_split: float = VAL_SPLIT,
     image_size: int = IMAGE_SIZE,
@@ -79,6 +86,9 @@ def create_dataloaders(
     seed: int = RANDOM_SEED,
 ) -> Dict:
     """Create stratified train/val loaders and held-out test loader."""
+    if train_dir is None or test_dir is None:
+        train_dir, test_dir = resolve_data_dirs()
+
     if not train_dir.exists() or not test_dir.exists():
         raise FileNotFoundError(
             f"Dataset directories not found at:\n  Train: {train_dir}\n  Test:  {test_dir}\n"

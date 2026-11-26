@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.metrics import f1_score
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from src.config import (
     CHECKPOINT_DIR,
@@ -28,7 +29,7 @@ from src.config import (
 )
 from src.dataset import create_dataloaders
 from src.evaluate import run_evaluation
-from src.model import build_model, freeze_backbone, unfreeze_top_layers
+from src.model import build_model, freeze_backbone, unfreeze_layers
 
 
 def set_seed(seed: int = RANDOM_SEED) -> None:
@@ -39,7 +40,7 @@ def set_seed(seed: int = RANDOM_SEED) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def run_epoch(model, loader, criterion, device, optimizer=None):
+def run_epoch(model, loader, criterion, device, optimizer=None, tta: bool = False):
     is_train = optimizer is not None
     model.train() if is_train else model.eval()
 
@@ -53,16 +54,26 @@ def run_epoch(model, loader, criterion, device, optimizer=None):
 
             if is_train:
                 optimizer.zero_grad()
-
-            logits = model(images)
-            loss = criterion(logits, labels)
-
-            if is_train:
+                logits = model(images)
+                loss = criterion(logits, labels)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)
                 optimizer.step()
+                probs = F.softmax(logits, dim=1)
+            else:
+                logits = model(images)
+                loss = criterion(logits, labels)
+                if tta:
+                    p0 = F.softmax(logits, dim=1)
+                    p1 = F.softmax(model(torch.flip(images, dims=[3])), dim=1)
+                    p2 = F.softmax(model(torch.flip(images, dims=[2])), dim=1)
+                    p3 = F.softmax(model(torch.flip(images, dims=[2, 3])), dim=1)
+                    probs = (p0 + p1 + p2 + p3) / 4.0
+                else:
+                    probs = F.softmax(logits, dim=1)
 
             running_loss += loss.item() * images.size(0)
-            preds = logits.argmax(dim=1)
+            preds = probs.argmax(dim=1)
             all_true.extend(labels.cpu().numpy().tolist())
             all_pred.extend(preds.cpu().numpy().tolist())
 
@@ -76,14 +87,15 @@ def run_epoch(model, loader, criterion, device, optimizer=None):
 def train(args) -> Path:
     set_seed(args.seed)
     device = get_device()
-    print(f"Using device: {device}")
+    print(f"Using device: {device} | model={args.model} | unfreeze={args.unfreeze}", flush=True)
 
     data = create_dataloaders(batch_size=args.batch_size, seed=args.seed)
     class_names = data["class_names"]
     num_classes = len(class_names)
     print(
         f"Dataset loaded: {data['train_size']} train | {data['val_size']} val | "
-        f"{data['test_size']} test | {num_classes} classes"
+        f"{data['test_size']} test | {num_classes} classes",
+        flush=True,
     )
 
     model = build_model(arch=args.model, num_classes=num_classes, dropout=args.dropout, pretrained=True).to(device)
@@ -100,8 +112,17 @@ def train(args) -> Path:
     }
 
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    best_ckpt_path = CHECKPOINT_DIR / "best_model.pth"
+    save_name = args.save_name or f"{args.model}_best.pth"
+    best_ckpt_path = CHECKPOINT_DIR / save_name
     best_val_acc = -1.0
+
+    if args.resume and Path(args.resume).exists():
+        prev = torch.load(args.resume, map_location=device, weights_only=False)
+        model.load_state_dict(prev["model_state_dict"])
+        best_val_acc = float(prev.get("val_acc", -1.0))
+        if "history" in prev:
+            history = prev["history"]
+        print(f"Resumed weights from {args.resume} (best_val_acc={best_val_acc*100:.2f}%)", flush=True)
 
     def maybe_save(epoch_num: int, val_acc: float, val_f1: float):
         nonlocal best_val_acc
@@ -123,7 +144,7 @@ def train(args) -> Path:
         return False
 
     # -------- Stage 1: Frozen backbone warmup --------
-    print(f"\n--- Stage 1: Warmup (Frozen {args.model} backbone, {args.stage1_epochs} epochs) ---")
+    print(f"\n--- Stage 1: Warmup (Frozen {args.model} backbone, {args.stage1_epochs} epochs) ---", flush=True)
     freeze_backbone(model, args.model)
     opt1 = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad],
@@ -152,10 +173,10 @@ def train(args) -> Path:
             flush=True,
         )
 
-    # -------- Stage 2: Fine-tune top convolutional blocks --------
+    # -------- Stage 2: Full or Top-Block Fine-Tuning --------
     if args.stage2_epochs > 0:
-        print(f"\n--- Stage 2: Fine-Tuning Top Layers ({args.stage2_epochs} epochs) ---")
-        backbone_params, head_params = unfreeze_top_layers(model, args.model)
+        print(f"\n--- Stage 2: Fine-Tuning ({args.unfreeze}, {args.stage2_epochs} epochs) ---", flush=True)
+        backbone_params, head_params = unfreeze_layers(model, args.model, mode=args.unfreeze)
         opt2 = torch.optim.AdamW(
             [
                 {"params": backbone_params, "lr": args.stage2_backbone_lr},
@@ -163,13 +184,13 @@ def train(args) -> Path:
             ],
             weight_decay=args.weight_decay,
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt2, T_max=args.stage2_epochs)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt2, T_max=args.stage2_epochs, eta_min=1e-6)
 
         for ep in range(1, args.stage2_epochs + 1):
             total_epoch += 1
             t0 = time.time()
             tr_loss, tr_acc, _ = run_epoch(model, data["train_loader"], criterion, device, optimizer=opt2)
-            va_loss, va_acc, va_f1 = run_epoch(model, data["val_loader"], criterion, device)
+            va_loss, va_acc, va_f1 = run_epoch(model, data["val_loader"], criterion, device, tta=False)
             scheduler.step()
             history["train_loss"].append(tr_loss)
             history["val_loss"].append(va_loss)
@@ -186,12 +207,11 @@ def train(args) -> Path:
                 flush=True,
             )
 
-    # Update history inside best checkpoint so plots include all epochs
     ckpt = torch.load(best_ckpt_path, map_location="cpu", weights_only=False)
     ckpt["history"] = history
     torch.save(ckpt, best_ckpt_path)
 
-    print(f"\nBest checkpoint saved to {best_ckpt_path} (val_acc={best_val_acc*100:.2f}%)")
+    print(f"\nBest checkpoint saved to {best_ckpt_path} (val_acc={best_val_acc*100:.2f}%)", flush=True)
     if not args.skip_eval:
         run_evaluation(best_ckpt_path, OUTPUT_DIR)
     return best_ckpt_path
@@ -199,7 +219,15 @@ def train(args) -> Path:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train skin cancer classification model on ISIC dataset.")
-    parser.add_argument("--model", type=str, default=DEFAULT_MODEL, choices=["mobilenet_v2", "efficientnet_b0", "resnet50"])
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=DEFAULT_MODEL,
+        choices=["mobilenet_v2", "efficientnet_b0", "densenet121", "resnet50"],
+    )
+    parser.add_argument("--unfreeze", type=str, default="all", choices=["all", "top"])
+    parser.add_argument("--resume", type=str, default=None)
+    parser.add_argument("--save-name", type=str, default=None)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--stage1-epochs", type=int, default=DEFAULT_STAGE1_EPOCHS)
     parser.add_argument("--stage2-epochs", type=int, default=DEFAULT_STAGE2_EPOCHS)
